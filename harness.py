@@ -24,8 +24,7 @@ from pathlib import Path
 
 from word500.driver import play
 from word500.game import Game
-from word500.solvers.greedy_letters import GreedyLetters
-from word500.solvers.random_consistent import RandomConsistent
+from word500.solvers.registry import SOLVERS
 from word500.wordlist import Mode, load_allowed, load_answers, possible_secrets
 
 
@@ -37,7 +36,6 @@ def cand_for_verify(candidates: List[str], verify: bool) -> Optional[List[str]]:
     """
     return candidates if verify else None
 
-SOLVERS = {"random": RandomConsistent, "greedy": GreedyLetters}
 
 BITS_PER_GUESS = log2(20)   # Word500 has 20 distinct feedbacks
 BAR = "\u2587"
@@ -297,7 +295,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
     settings = [("blind", pool)] + ([("oracle", answer_pool)] if args.oracle else [])
 
     rows = []
-    for key, cls in chosen:
+    for key, factory in chosen:
         for knows, candidates in settings:
             options = {
                 "max_guesses": args.guesses,
@@ -305,14 +303,16 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 "verify": args.verify,
                 "seed": args.seed,
             }
-            def make_solver(sd: int, c: type = cls, cand: list[str] = candidates) -> Any:
-                if c is RandomConsistent:
-                    return c(cand, rng=random.Random(sd))
-                return c(cand)
+            def make_solver(
+                sd: int,
+                f: Callable[[list[str], int], Any] = factory,
+                candidates_: list[str] = candidates,
+            ) -> object:
+                return f(candidates_, sd)
 
             results = evaluate(make_solver, secrets, options)
             st = summarise(results, args.guesses)
-            rows.append((cls.__name__, knows, len(candidates), st))
+            rows.append((key, knows, len(candidates), st))
 
             if args.verbose:
                 for secret, turns, history in results:
@@ -322,7 +322,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
             if not args.compare:
                 report(
-                    f"{cls.__name__}  |  {mode.value}  |  {knows}  |  "
+                    f"{key}  |  {mode.value}  |  {knows}  |  "
                     f"{args.guesses}-guess budget  |  {st['n']} secrets",
                     st,
                     args.guesses,
@@ -344,7 +344,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                     writer.writerow(["secret", "turns", "solver", "knows_answers",
                                      "mode", "max_guesses", "seed"])
                     for secret, turns, _ in results:
-                        writer.writerow([secret, turns or "", cls.__name__, knows,
+                        writer.writerow([secret, turns or "", key, knows,
                                          mode.value, args.guesses, args.seed])
                 print(f"  wrote {path}")
 
