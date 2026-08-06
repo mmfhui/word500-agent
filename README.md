@@ -3,18 +3,19 @@
 An AI agent that plays [Word500](https://word500.com), a Wordle variant
 where feedback tells you **how many** letters are correct but not **which**.
 
-CS 4100 final project — Rishikesan, Sun, Michael
+CS 4100 Final Project: 
+**Team Members:** Rishikesan, Sun, Michael
 
-## Why this is harder than Wordle
+## Why this is harder than Wordle?
 
 Wordle's feedback is labelled: you see which letter went yellow. Word500's is
-anonymous — you get three counts (green / yellow / red) that always sum to 5.
+anonymous: you get three counts (green / yellow / red) that always sum to 5.
 
-That leaves **20 distinct feedback outcomes** per guess against Wordle's 243, so
+That leaves **20 distinct feedback outcomes** per guess against Wordle's 243 so
 each guess carries at most log2(20) ≈ **4.3 bits** instead of 7.9. Same
 dictionary, less than half the information per guess.
 
-## Setup
+## Setup: 
 
     ./download_data.sh      # fetch and verify the word lists
     python play.py          # play it yourself
@@ -22,7 +23,7 @@ dictionary, less than half the information per guess.
 `download_data.sh` ends by running `python -m word500.wordlist`, which fails
 loudly if a list is malformed or if any answer is missing from the guess pool.
 
-## Difficulty modes (from the official game)
+## Difficulty modes (from the official game): 
 
 Each constrains the **secret word**, not your guesses:
 
@@ -32,10 +33,10 @@ Each constrains the **secret word**, not your guesses:
 | `standard+` | no repeated letters |
 | `advanced` | no restrictions |
 
-Filtering the candidate pool by mode is legitimate deduction — the mode is shown
-on screen before you guess — so it does not violate the design constraint below.
+Filtering the candidate pool by mode is legitimate deduction, the mode is shown
+on screen before you guess, so it does not violate the design constraint below.
 
-## Running the harness
+## Running the harness: 
 
     python harness.py                          # one solver, full sweep
     python harness.py --compare --oracle       # every solver, one table
@@ -46,14 +47,14 @@ on screen before you guess — so it does not violate the design constraint belo
     python harness.py --verify                 # cross-check filtering (slow)
     python harness.py --csv results/run.csv    # per-game rows
 
-Each game is seeded from `crc32(secret)`, so any game replays identically in
+Each game is seeded from `crc32(secret)` so any game replays identically in
 isolation and `--sample` never changes how a game is played.
 
 At the default 8-guess budget almost everything wins, making win rate a
-near-useless metric — use `--guesses 5` when you need a number that
+near-useless metric: use `--guesses 5` when you need a number that
 discriminates between strategies.
 
-## Baselines
+## Baselines: 
 
 Standard mode, 8-guess budget, 1,477 secrets:
 
@@ -64,14 +65,14 @@ Standard mode, 8-guess budget, 1,477 secrets:
 | GreedyLetters | yes | 4.523 | 100% | 2.33 |
 | RandomConsistent | yes | 4.784 | 100% | 2.20 |
 
-The information floor is **3.02 guesses**, so the best baseline leaves ~2.4
+The information floor is **3.02 guesses** so the best baseline leaves ~2.4
 guesses of headroom. Withholding the answer list costs **~0.86 guesses** —
 measured with `--oracle`, not estimated.
 
 Notably, random-with-answers (4.784) beats greedy-without (5.379): the
 information we deliberately withhold is worth more than the heuristic.
 
-## Where the baselines fail
+## Where does the baselines fail?
 
 Failures cluster in families of words differing in a **single position**:
 `_ATER`, `_AKER`, `_IGHT`, `_ITCH`, `_OUND`. Aggregated over ten seeds, seven of
@@ -87,7 +88,7 @@ initial consonants would be smarter.
 No word is reliably unsolvable — even the worst is solved 60% of the time — so
 these are systematically *risky*, not hard.
 
-## Design constraint
+## Design constraint: 
 
 The solver never sees the answer list and never receives the `Game` object. It
 gets a candidate pool at construction and `(guess, feedback)` pairs thereafter.
@@ -96,9 +97,9 @@ This is enforced structurally: no file under `word500/solvers/` imports
 `load_answers`. It also means the same solver can play the real word500.com
 with a human relaying the counts.
 
-## Correctness checks
+## Correctness checks: 
 
-Filtering fails silently — a bad filter produces no crash, just quietly worse
+Filtering fails silently: a bad filter produces no crash, just quietly worse
 averages that look like a weak strategy. Two checks, both validated by
 deliberately injecting broken filters:
 
@@ -109,10 +110,10 @@ deliberately injecting broken filters:
   from scratch. Also catches a filter that eliminates too *little*, which the
   free check is structurally blind to.
 
-Neither can catch an error in `score()` itself, since both depend on it. That
+Neither can catch an error in `score()` itself since both depend on it. That
 requires cross-checking one guess against the live site.
 
-## Layout
+## Layout: 
 
 | path | role |
 |---|---|
@@ -126,17 +127,17 @@ requires cross-checking one guess against the live site.
 | `harness.py` | sweep an agent over every secret and report |
 | `download_data.sh` | fetch and verify the word lists |
 
-## Word lists
+## Word lists: 
 
 Wordle's lists stand in for Word500's, which isn't published. `answers.txt` is
 the original 2,315 answers; `allowed.txt` is the current valid-guess list
-(14,855 words — larger than the commonly cited 12,972, since words have been
+(14,855 words — larger than the commonly cited 12,972 since words have been
 added since 2021). Neither is committed; `download_data.sh` fetches them.
 
 Because Word500 uses its own unpublished dictionary, exact parity with
 published Wordle solver benchmarks was never available.
 
-## Adding a solver
+## Adding a solver: 
 
 Subclass `Solver`, implement `next_guess()`, and register it:
 
@@ -155,7 +156,7 @@ may still be the most informative thing to guess.
 Register in `SOLVERS` and it picks up `--compare`, `--oracle`, `--verify`,
 `--only`, and CSV output automatically.
 
-## Useful identity
+## Useful identity: 
 
     greens + yellows = sum over letters of min(count in guess, count in answer)
 
