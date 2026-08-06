@@ -25,6 +25,7 @@ from pathlib import Path
 from word500.driver import play
 from word500.game import Game
 from word500.solvers.registry import SOLVERS
+import word500.solvers.registry as registry
 from word500.wordlist import Mode, load_allowed, load_answers, possible_secrets
 
 
@@ -177,6 +178,17 @@ def report(
             f"{got / BITS_PER_GUESS:.1%} of the ceiling"
         )
 
+    # Report repeated-letter statistics when present (useful for STANDARD mode
+    # analysis).
+    if 'repeat_guesses' in summary:
+        print(f"\n  REPEATED-LETTER GUESSES")
+        print(f"    total repeated guesses: {summary.get('repeat_guesses', 0)}")
+        print(f"    games with >=1 repeated guess: {summary.get('repeat_games', 0)} / {n_secrets}")
+        examples = summary.get('repeat_examples', [])
+        if examples:
+            for i in range(0, min(len(examples), 8), 8):
+                print("    examples: " + ", ".join(examples[i:i+8]))
+
     if summary["fails"]:
         print(f"\n  FAILED ({len(summary['fails'])})")
         for i in range(0, min(len(summary["fails"]), 32), 8):
@@ -268,10 +280,20 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                     help="print every guess of every game")
     ap.add_argument("--oracle", action="store_true",
                     help="also give the solver the answer list (upper bound)")
+    ap.add_argument("--full-pool-below", type=int, default=None,
+                    help="override registry FULL_POOL_BELOW threshold (None uses default)")
     ap.add_argument("--csv", type=Path)
     args = ap.parse_args()
 
     mode = Mode(args.mode)
+
+    # Allow overriding the registry threshold that controls when the full
+    # guess pool is considered. Setting this here affects the factories in
+    # word500.solvers.registry because they read the global at construction
+    # time.
+    if args.full_pool_below is not None:
+        registry.FULL_POOL_BELOW = args.full_pool_below
+
     pool = possible_secrets(load_allowed(), mode)          # 'blind' candidates
     answer_pool = possible_secrets(load_answers(), mode)   # 'oracle' candidates
     secrets = list(answer_pool)
@@ -312,6 +334,31 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
             results = evaluate(make_solver, secrets, options)
             st = summarise(results, args.guesses)
+
+            # Repeated-letter analysis: in STANDARD mode secrets cannot have
+            # repeated letters; this checks whether the solver nevertheless
+            # ever chooses guesses that repeat letters and how often.
+            def _has_repeat(word: str) -> bool:
+                return len(set(word)) != len(word)
+
+            repeat_games = 0
+            repeat_guesses = 0
+            repeat_examples = []
+            for secret, turns, history in results:
+                g_repeated = False
+                for guess, _ in history:
+                    if _has_repeat(guess):
+                        repeat_guesses += 1
+                        g_repeated = True
+                if g_repeated:
+                    repeat_games += 1
+                    if len(repeat_examples) < 8:
+                        repeat_examples.append(secret)
+
+            st['repeat_games'] = repeat_games
+            st['repeat_guesses'] = repeat_guesses
+            st['repeat_examples'] = repeat_examples
+
             rows.append((key, knows, len(candidates), st))
 
             if args.verbose:
