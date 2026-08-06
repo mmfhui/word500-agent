@@ -1,0 +1,174 @@
+WORD500 AGENT -- PERFORMANCE BENCHMARKS
+=======================================
+
+Machine: MacBook Pro (Apple silicon), Python 3.13, numpy 2.x, single process.
+Word lists: 14,855 allowed guesses; 8,522 after the standard-mode filter;
+1,477 standard-mode secrets.
+
+All figures measured, except the one marked (est).
+
+
+1. FEEDBACK TABLE CONSTRUCTION
+------------------------------
+
+Every (guess, answer) pair's feedback is fixed for a given word list, so it is
+computed once into a uint8 lookup table. Building it naively still means one
+Python call per pair. Vectorising relies on the identity
+
+    greens + yellows = sum over letters of min(count in guess, count in answer)
+
+so yellows never need the per-pair multiset logic. The table is then 5
+positional comparisons plus 26 letter-count minimums -- 31 array passes.
+
+    method                         8,522 x 8,522      speedup
+    ---------------------------------------------------------
+    naive loop over score()              190 s            1x
+    vectorised numpy                    2.48 s           76x
+
+    memory: 73 MB (8,522 pool) / 221 MB (full 14,855 pool), one uint8 plane
+
+Cached to disk as .npy keyed on a hash of the word list. Reload is 0.001 s --
+~3,300x faster than rebuilding -- and memory-mapped, so multiple processes
+would share one physical copy.
+
+
+2. OPENING GUESS SEARCH
+-----------------------
+
+Turn 1 is identical in every game, so the best opener is a constant. Finding it
+means scoring all 8,522 candidate guesses against all 8,522 candidates.
+
+    method                          time      result
+    --------------------------------------------------
+    pure Python                    ~6 min      TARES
+    over the feedback table          0.3 s      TARES
+
+    ~1,200x, and two independent methods agree on the same word.
+
+
+3. CORRECTNESS VERIFICATION
+---------------------------
+
+A wrong table would fail silently across every solver at once.
+
+    check                                        result
+    -----------------------------------------------------------
+    matrix vs score() on 20,000 random pairs     0 mismatches
+    diagonal is a win for all i                  true
+    matrix == matrix.T                           true
+    feedback classes observed                    20 of 20 valid
+
+A validator that has never failed proves nothing, so it was tested by
+deliberately corrupting the table:
+
+    injected fault                    detection
+    -------------------------------------------------------
+    every code shifted by 1           5000 / 5000 caught
+    0.1% of cells corrupted           18 caught (~20 expected)
+    single cell corrupted             not caught (1 in 64M)
+    transposed                        no error to catch -- score() is
+                                      symmetric, so M == M.T genuinely
+                                      holds and row/column order cannot
+                                      be wrong
+
+End to end, matrix-backed and pure-Python solvers over the same secrets, same
+seed:
+
+    solver          avg guesses      wall time      (40 secrets)
+    ------------------------------------------------------------
+    py-entropy          5.200            181 s
+    entropy             5.200           1.97 s          92x
+
+Identical averages from two independent implementations is the strongest
+correctness evidence available; the time difference is the speedup.
+
+
+4. FILTERING
+------------
+
+Choosing a guess is the visible cost, but narrowing the candidate set runs on
+every turn of every game for every solver. Holding candidates as a numpy index
+array makes it one vectorised comparison instead of N score() calls.
+
+    solver     avg guesses    wall time    (150 secrets)
+    ----------------------------------------------------
+    greedy         5.228         5.36 s
+    entropy        5.087         6.08 s
+
+Entropy evaluates 8,522 candidate guesses per turn; greedy evaluates none. It
+costs 13% more wall time and wins on quality, because faster filtering recovers
+nearly everything the search spends.
+
+
+5. FULL SWEEP
+-------------
+
+    configuration                        1,477 secrets
+    ---------------------------------------------------
+    pure Python entropy                  ~7 hours (est)
+    + feedback matrix                          55.7 s
+    + cached opener                        (included)
+
+    ~450x end to end.
+
+Per-configuration timings, 400 secrets, standard mode:
+
+    solver      blind     oracle
+    ----------------------------
+    entropy     15.4 s     9.5 s
+    expected    14.1 s     8.1 s
+    greedy      13.9 s     2.5 s
+    minimax     13.5 s     8.1 s
+    parts       13.2 s     8.3 s
+    random      10.5 s     1.8 s
+
+Oracle runs are faster because the candidate pool starts at 1,477 rather
+than 8,522.
+
+
+6. GUESS POOL THRESHOLD
+-----------------------
+
+FULL_POOL_BELOW controls when the solver searches the whole 14,855-word list
+rather than only the surviving candidates. 300 secrets, entropy, standard:
+
+    threshold        meaning                          avg guesses
+    ------------------------------------------------------------
+    0                candidates only, always              5.203
+    150              full pool when <= 150 remain         5.130
+    unrestricted     full pool always                     5.117
+
+Restricting entirely to candidates costs ~0.09 guesses; any reasonable
+threshold recovers almost all of it. 150 and unrestricted are not
+distinguishable at this sample size. Kept at 150.
+
+
+7. PARALLELISM -- DEFERRED
+--------------------------
+
+Games are fully independent, and per-game seeding derives from crc32(secret),
+so results do not depend on worker count or completion order. Multiprocessing
+would give roughly linear speedup across cores.
+
+Not implemented: the matrix brought a full sweep to 56 s, so the 24
+configurations needed for the strategy comparison are about 25 minutes of
+unattended compute. The remaining saving did not justify the work.
+
+If added, the table should be memory-mapped rather than passed to workers --
+macOS and Windows both default to the 'spawn' start method, so each worker
+would otherwise receive its own 221 MB copy.
+
+
+8. WHAT MADE THE DIFFERENCE
+---------------------------
+
+Two decisions accounted for most of the speedup, and neither was obvious:
+
+  * The identity in section 1. Without it there is no way to get yellows
+    without per-pair multiset logic, and the build stays in Python.
+
+  * Scoring all guesses in one array operation rather than one at a time. The
+    first version scored each guess separately and entropy was only 4x faster;
+    numpy's per-call overhead on 20-element arrays cost more than the
+    arithmetic. Building one (guesses x classes) count table and scoring it in
+    a single operation took that from 4x to 101x.
