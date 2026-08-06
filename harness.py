@@ -181,7 +181,7 @@ def report(
     # Report repeated-letter statistics when present (useful for STANDARD mode
     # analysis).
     if 'repeat_guesses' in summary:
-        print(f"\n  REPEATED-LETTER GUESSES")
+        print("\n  REPEATED-LETTER GUESSES")
         print(f"    total repeated guesses: {summary.get('repeat_guesses', 0)}")
         print(f"    games with >=1 repeated guess: {summary.get('repeat_games', 0)} / {n_secrets}")
         examples = summary.get('repeat_examples', [])
@@ -343,7 +343,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
             repeat_games = 0
             repeat_guesses = 0
-            repeat_examples = []
+            repeat_examples: list[str] = []
             for secret, turns, history in results:
                 g_repeated = False
                 for guess, _ in history:
