@@ -12,6 +12,7 @@ Each game is seeded from its own secret word, so any single game can be
 replayed in isolation and --sample never changes how a game is played.
 """
 
+import time
 import argparse
 import csv
 import random
@@ -24,7 +25,7 @@ from pathlib import Path
 
 from word500.driver import play
 from word500.game import Game
-from word500.solvers.registry import SOLVERS
+from word500.solvers.registry import REFERENCE, SOLVERS
 import word500.solvers.registry as registry
 from word500.wordlist import Mode, load_allowed, load_answers, possible_secrets
 
@@ -105,7 +106,15 @@ def summarise(
     # Failures counted as max_guesses + 1 so a solver cannot look good by
     # failing on the words it would have found slowly.
     penalised: List[int] = wins + [max_guesses + 1] * len(fails)
+    # Guesses containing a repeated letter. In standard/standard+ the secret
+    # cannot have one, so choosing such a guess trades breadth for positional
+    # precision -- worth counting rather than assuming it never happens.
+    repeats = [w for _, _, hist in results for w, _ in hist if len(set(w)) < 5]
+    games_with_repeat = sum(
+        1 for _, _, hist in results if any(len(set(w)) < 5 for w, _ in hist))
     return {
+        "repeats": repeats,
+        "games_with_repeat": games_with_repeat,
         "n": len(results),
         "wins": len(wins),
         "fails": fails,
@@ -177,18 +186,13 @@ def report(
             f"    achieved           {got:>6.2f} bits/guess  ->  "
             f"{got / BITS_PER_GUESS:.1%} of the ceiling"
         )
-
-    # Report repeated-letter statistics when present (useful for STANDARD mode
-    # analysis).
-    if 'repeat_guesses' in summary:
-        print(f"\n  REPEATED-LETTER GUESSES")
-        print(f"    total repeated guesses: {summary.get('repeat_guesses', 0)}")
-        print(f"    games with >=1 repeated guess: {summary.get('repeat_games', 0)} / {n_secrets}")
-        examples = summary.get('repeat_examples', [])
-        if examples:
-            for i in range(0, min(len(examples), 8), 8):
-                print("    examples: " + ", ".join(examples[i:i+8]))
-
+    print("\n  REPEATED-LETTER GUESSES")
+    print(f"    total                {len(summary['repeats'])}")
+    print(f"    games with >=1        {summary['games_with_repeat']} / {summary['n']}"
+          f"   ({summary['games_with_repeat'] / summary['n']:.1%})")
+    if summary["repeats"]:
+        shown = sorted(set(summary["repeats"]))[:8]
+        print(f"    examples              {'  '.join(shown)}")
     if summary["fails"]:
         print(f"\n  FAILED ({len(summary['fails'])})")
         for i in range(0, min(len(summary["fails"]), 32), 8):
@@ -266,7 +270,9 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
     """
     ap = argparse.ArgumentParser(description="Evaluate Word500 agents.")
     ap.add_argument("--solver", default="random", choices=sorted(SOLVERS))
-    ap.add_argument("--compare", action="store_true", help="run every solver")
+    ap.add_argument("--compare", action="store_true",
+                    help="run every solver except the slow py- references")
+    ap.add_argument("--solvers", help="comma-separated keys, overrides --compare")
     ap.add_argument("--mode", default=Mode.STANDARD.value,
                     choices=[m.value for m in Mode])
     ap.add_argument("--guesses", type=int, default=8)
@@ -310,7 +316,19 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         # Its own rng, so sampling cannot perturb how any game is played.
         secrets = sorted(random.Random(args.seed).sample(secrets, args.sample))
 
-    chosen = sorted(SOLVERS.items()) if args.compare else [(args.solver, SOLVERS[args.solver])]
+    if args.solvers:
+        keys = [k.strip() for k in args.solvers.split(",")]
+        unknown = [k for k in keys if k not in SOLVERS]
+        if unknown:
+            raise SystemExit(f"unknown solver(s): {', '.join(unknown)}\n"
+                             f"available: {', '.join(sorted(SOLVERS))}")
+        chosen = [(k, SOLVERS[k]) for k in keys]
+    elif args.compare:
+        # Reference implementations are excluded: including py-entropy turns a
+        # one-minute sweep into hours.
+        chosen = sorted((k, v) for k, v in SOLVERS.items() if k not in REFERENCE)
+    else:
+        chosen = [(args.solver, SOLVERS[args.solver])]
 
     # Each solver runs once per knowledge setting. 'blind' is the real
     # project constraint; 'oracle' is the upper bound it is measured against.
@@ -332,32 +350,12 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             ) -> object:
                 return f(candidates_, sd)
 
+            t0 = time.perf_counter()
+            print(f"  running {key} / {knows} over {len(secrets)} secrets...",
+                  flush=True)
             results = evaluate(make_solver, secrets, options)
+            print(f"    done in {time.perf_counter() - t0:.1f}s", flush=True)
             st = summarise(results, args.guesses)
-
-            # Repeated-letter analysis: in STANDARD mode secrets cannot have
-            # repeated letters; this checks whether the solver nevertheless
-            # ever chooses guesses that repeat letters and how often.
-            def _has_repeat(word: str) -> bool:
-                return len(set(word)) != len(word)
-
-            repeat_games = 0
-            repeat_guesses = 0
-            repeat_examples = []
-            for secret, turns, history in results:
-                g_repeated = False
-                for guess, _ in history:
-                    if _has_repeat(guess):
-                        repeat_guesses += 1
-                        g_repeated = True
-                if g_repeated:
-                    repeat_games += 1
-                    if len(repeat_examples) < 8:
-                        repeat_examples.append(secret)
-
-            st['repeat_games'] = repeat_games
-            st['repeat_guesses'] = repeat_guesses
-            st['repeat_examples'] = repeat_examples
 
             rows.append((key, knows, len(candidates), st))
 
