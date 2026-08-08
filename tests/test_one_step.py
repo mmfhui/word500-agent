@@ -1,3 +1,10 @@
+"""Unit tests for one-step solving behavior.
+
+These tests validate the OneStepAhead solver's scoring helpers, move
+selection, candidate filtering, and history consistency against Word500
+feedback rules.
+"""
+
 import unittest
 from math import log2
 
@@ -13,6 +20,8 @@ from word500.solvers.one_step import (
 from word500.wordlist import Mode, load_allowed, possible_secrets
 
 class OneStepAheadTests(unittest.TestCase):
+    """Test cases for the one-step solver and its scoring helpers."""
+
     def test_scorer_helpers_return_expected_values(self) -> None:
         expected_entropy = -((2 / 3) * log2(2 / 3) + (1 / 3) * log2(1 / 3))
 

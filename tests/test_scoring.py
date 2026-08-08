@@ -1,9 +1,16 @@
+"""Unit tests for the Word500 scoring model.
+
+These tests ensure feedback values, repeated-letter handling, and scoring
+invariants are correct for the core Word500 response model.
+"""
+
 import unittest
 
 from word500.scoring import Feedback, score
 
-
 class ScoringTests(unittest.TestCase):
+    """Validation of the Feedback model and score() helper."""
+
     def test_exact_match_returns_full_green_feedback(self) -> None:
         feedback = score("apple", "apple")
 

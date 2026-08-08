@@ -11,6 +11,7 @@ from functools import lru_cache
 from typing import Any, Callable
 
 from word500.matrix import FeedbackTable
+from word500.solvers.endgame_search import EndgameSolver
 from word500.solvers.greedy_letters import GreedyLetters
 from word500.solvers.human_probe import HumanProbe
 from word500.solvers.matrix_solver import SCORERS as M_SCORERS
@@ -80,6 +81,15 @@ SOLVERS = {
     "minimax": _matrix_one_step("minimax"),
     "expected": _matrix_one_step("expected"),
     "parts": _matrix_one_step("parts"),
+    # Endgame strategy: uses two-move lookahead once the candidate list is small.
+    "endgame": lambda candidates, seed: EndgameSolver(
+        candidates,
+        guess_pool=load_allowed(),
+        cutoff=10,
+        use_two_step=True,
+        first_metric="expected",
+        second_metric="expected",
+    ),
 }
 
 
