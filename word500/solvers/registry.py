@@ -13,6 +13,7 @@ from typing import Any, Callable
 from word500.matrix import FeedbackTable
 from word500.solvers.endgame_search import EndgameSolver
 from word500.solvers.greedy_letters import GreedyLetters
+from word500.solvers.human_probe import HumanProbe
 from word500.solvers.matrix_solver import SCORERS as M_SCORERS
 from word500.solvers.matrix_solver import MatrixOneStep, MatrixOneStepConfig
 from word500.solvers.one_step import SCORERS, OneStepAhead
@@ -71,6 +72,7 @@ SOLVERS = {
     "random": lambda candidates, seed: RandomConsistent(
         candidates, rng=random.Random(seed)),
     "greedy": lambda candidates, seed: GreedyLetters(candidates),
+    "human": lambda candidates, seed: HumanProbe(candidates),
     # Pure-Python reference implementations. Slow; kept for cross-checking.
     "py-entropy": _one_step("entropy"),
     "py-minimax": _one_step("minimax"),

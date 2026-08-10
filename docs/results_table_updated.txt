@@ -1,0 +1,112 @@
+  running entropy / blind over 400 secrets...
+    done in 30.3s
+  wrote results\baselines_entropy_blind.csv
+  running entropy / oracle over 400 secrets...
+    done in 13.6s
+  wrote results\baselines_entropy_oracle.csv
+  running expected / blind over 400 secrets...
+    done in 23.8s
+  wrote results\baselines_expected_blind.csv
+  running expected / oracle over 400 secrets...
+    done in 13.1s
+  wrote results\baselines_expected_oracle.csv
+  running greedy / blind over 400 secrets...
+    done in 19.8s
+  wrote results\baselines_greedy_blind.csv
+  running greedy / oracle over 400 secrets...
+    done in 3.4s
+  wrote results\baselines_greedy_oracle.csv
+  running human / blind over 400 secrets...
+    done in 22.1s
+  wrote results\baselines_human_blind.csv
+  running human / oracle over 400 secrets...
+    done in 3.9s
+  wrote results\baselines_human_oracle.csv
+  running minimax / blind over 400 secrets...
+    done in 21.3s
+  wrote results\baselines_minimax_blind.csv
+  running minimax / oracle over 400 secrets...
+    done in 12.5s
+  wrote results\baselines_minimax_oracle.csv
+  running parts / blind over 400 secrets...
+    done in 22.9s
+  wrote results\baselines_parts_blind.csv
+  running parts / oracle over 400 secrets...
+    done in 13.4s
+  wrote results\baselines_parts_oracle.csv
+  running random / blind over 400 secrets...
+    done in 16.7s
+  wrote results\baselines_random_blind.csv
+  running random / oracle over 400 secrets...
+    done in 2.9s
+  wrote results\baselines_random_oracle.csv
+
+standard | 400 secrets | 8-guess budget
+
+  PERFORMANCE
+  solver               knows   solved      avg      pen   med  wst
+  ----------------------------------------------------------------
+  entropy              blind  100.0%    5.098    5.098   5.0    7
+  entropy             oracle  100.0%    4.367    4.367   4.0    6
+  expected             blind  100.0%    5.103    5.103   5.0    6
+  expected            oracle  100.0%    4.388    4.388   4.0    6
+  greedy               blind   99.5%    5.407    5.425   5.0    8
+  greedy              oracle  100.0%    4.575    4.575   5.0    7
+  human                blind  100.0%    5.485    5.485   5.0    8
+  human               oracle  100.0%    4.787    4.787   5.0    7
+  minimax              blind  100.0%    5.230    5.230   5.0    7
+  minimax             oracle  100.0%    4.480    4.480   5.0    6
+  parts                blind  100.0%    5.147    5.147   5.0    7
+  parts               oracle  100.0%    4.412    4.412   4.0    6
+  random               blind   99.2%    5.610    5.635   6.0    8
+  random              oracle  100.0%    4.780    4.780   5.0    8
+
+  INFORMATION
+  solver               knows   pool   bits  floor  bits/g    eff   room
+  ---------------------------------------------------------------------
+  entropy              blind   8522  13.06   3.02    2.56  59.3%   2.08
+  entropy             oracle   1477  10.53   2.44    2.41  55.8%   1.93
+  expected             blind   8522  13.06   3.02    2.56  59.2%   2.08
+  expected            oracle   1477  10.53   2.44    2.40  55.5%   1.95
+  greedy               blind   8522  13.06   3.02    2.41  55.9%   2.39
+  greedy              oracle   1477  10.53   2.44    2.30  53.2%   2.14
+  human                blind   8522  13.06   3.02    2.38  55.1%   2.46
+  human               oracle   1477  10.53   2.44    2.20  50.9%   2.35
+  minimax              blind   8522  13.06   3.02    2.50  57.8%   2.21
+  minimax             oracle   1477  10.53   2.44    2.35  54.4%   2.04
+  parts                blind   8522  13.06   3.02    2.54  58.7%   2.13
+  parts               oracle   1477  10.53   2.44    2.39  55.2%   1.98
+  random               blind   8522  13.06   3.02    2.33  53.9%   2.59
+  random              oracle   1477  10.53   2.44    2.20  51.0%   2.34
+                       bits/g and eff are only comparable WITHIN a knows setting
+                       (they divide by the pool, which differs between them)
+
+  DISTRIBUTION
+  solver               knows        2     3     4     5     6     7     8   fail
+  ------------------------------------------------------------------------------
+  entropy              blind        0     4    57   236   102     1     0      0
+  entropy             oracle        2    25   204   162     7     0     0      0
+  expected             blind        0     4    52   243   101     0     0      0
+  expected            oracle        1    24   198   173     4     0     0      0
+  greedy               blind        1    12    58   136   140    46     5      2
+  greedy              oracle        2    33   143   174    45     2     0      0
+  human                blind        1    13    45   143   137    52     9      0
+  human               oracle        1    22   116   189    60    11     0      0
+  minimax              blind        0     3    49   203   143     2     0      0
+  minimax             oracle        1    21   166   209     3     0     0      0
+  parts                blind        0     7    62   205   117     9     0      0
+  parts               oracle        2    31   181   172    14     0     0      0
+  random               blind        0     9    46   125   138    69    10      3
+  random              oracle        1    25   129   157    77     9     1      0
+
+  COST OF NOT KNOWING THE ANSWER LIST
+    entropy             +0.730 guesses
+    expected            +0.715 guesses
+    greedy              +0.850 guesses
+    human               +0.698 guesses
+    minimax             +0.750 guesses
+    parts               +0.735 guesses
+    random              +0.855 guesses
+
+  best: entropy (oracle) at 4.367
+
