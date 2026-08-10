@@ -11,9 +11,14 @@ Two-step search is restricted to small pools to keep the solver fast.
 """
 
 from collections import Counter, defaultdict
+from math import log2
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
-from word500.solvers.base import Solver  # New endgame strategy solver integration
+import numpy as np
+from numpy.typing import NDArray
+
+from word500.matrix import FeedbackTable
+from word500.solvers.matrix_solver import SCORERS, MatrixSolver, matrix_one_step_guess
 
 Feedback = Tuple[int, int, int]
 FeedbackFn = Callable[[str, str], Feedback]
@@ -62,6 +67,22 @@ def expected_partition_size(partitions: Dict[Feedback, List[str]]) -> float:
 def worst_partition_size(partitions: Dict[Feedback, List[str]]) -> int:
     return max((len(group) for group in partitions.values()), default=0)
 
+def negative_entropy(partitions: Dict[Feedback, List[str]]) -> float:
+    """Negated Shannon entropy of the partition, in bits.
+
+    Negated so that, like expected_partition_size and worst_partition_size,
+    a lower score is a better guess -- callers minimise regardless of metric.
+    """
+    total = sum(len(group) for group in partitions.values())
+    if total == 0:
+        return 0.0
+    bits = 0.0
+    for group in partitions.values():
+        p = len(group) / total
+        if p > 0:
+            bits -= p * log2(p)
+    return -bits
+
 def one_step_score(
     candidates: Iterable[str],
     guess: str,
@@ -73,6 +94,8 @@ def one_step_score(
         return expected_partition_size(partitions)
     if metric == "worst":
         return worst_partition_size(partitions)
+    if metric == "entropy":
+        return negative_entropy(partitions)
     raise ValueError(f"Unknown metric: {metric}")
 
 def best_one_step_guess(
@@ -202,60 +225,79 @@ def should_use_endgame(candidates: List[str], cutoff: int = 10) -> bool:
     return len(candidates) <= cutoff
 
 
-class EndgameSolver(Solver):
+class EndgameSolver(MatrixSolver):
     """A Solver implementation that uses endgame lookahead.
 
-    This solver behaves like an ordinary agent in the harness but it
-    switches from one-step scoring to a two-step endgame search once the
-    remaining candidate pool is small.
+    Above `cutoff` candidates, guesses come from matrix-backed one-step
+    scoring (the same FeedbackTable machinery as MatrixOneStep) -- pure
+    Python one-step search over a multi-thousand-word pool takes tens of
+    seconds per guess and makes a full sweep impractical. Once the pool
+    shrinks to `cutoff` or below, it switches to the pure-Python two-step
+    lookahead in this module, which is cheap precisely because it is only
+    ever run over that small pool.
     """
 
     def __init__(
         self,
         candidates: list[str],
         guess_pool: list[str] | None = None,
+        table: FeedbackTable | None = None,
         *,
         cutoff: int = 10,
         use_two_step: bool = True,
         first_metric: str = "expected",
         second_metric: str = "expected",
+        scorer: Callable[[NDArray[np.int32], int], NDArray[np.float64]] | None = None,
+        full_pool_below: int | None = None,
+        opener: str | None = None,
     ) -> None:
-        super().__init__(candidates, guess_pool)
+        super().__init__(candidates, guess_pool, table=table)
         self.cutoff = cutoff
         self.use_two_step = use_two_step
         self.first_metric = first_metric
         self.second_metric = second_metric
+        self.scorer = scorer if scorer is not None else SCORERS["expected"]
+        self.full_pool_below = full_pool_below
+        # Fail here rather than mid-game. An opener outside the word list is a
+        # config error: the real game would reject it as an invalid guess.
+        if opener is not None and opener not in self.table.index:
+            raise ValueError(f"opener {opener!r} is not in the word list")
+        self.opener = opener
 
     @property
     def name(self) -> str:
         return f"EndgameSolver(cutoff={self.cutoff}, two_step={self.use_two_step})"
 
     def next_guess(self) -> str:
-        if not self.candidates:
+        idx = self.cand_idx
+        n = len(idx)
+        if n == 0:
             raise RuntimeError("no candidates left -- feedback was inconsistent")
-        if len(self.candidates) == 1:
-            return self.candidates[0]
+        if n == 1:
+            return str(self.table.words[idx[0]])
+        if not self.history and self.opener:
+            return self.opener
 
-        # Use candidate-only one-step before the endgame threshold to keep
-        # the solver efficient. Switch to two-step lookahead in the endgame.
-        if self.use_two_step and len(self.candidates) <= self.cutoff:
+        # Two-step search evaluates each candidate guess against every other
+        # guess in the pool, so it must stay restricted to self.candidates --
+        # running it over the full guess_pool is O(len(guess_pool)^2) pure
+        # Python calls and never finishes in practice.
+        if self.use_two_step and n <= self.cutoff:
+            candidates = self.candidates
             guess, _ = choose_endgame_guess(
-                self.candidates,
-                self.guess_pool if self.guess_pool is not None else self.candidates,
+                candidates,
+                candidates,
                 word500_feedback,
                 use_two_step=True,
                 cutoff=self.cutoff,
                 first_metric=self.first_metric,
                 second_metric=self.second_metric,
             )
-        else:
-            guess, _ = best_one_step_guess(
-                self.candidates,
-                self.candidates,
-                word500_feedback,
-                metric=self.second_metric,
-            )
-        return guess
+            return guess
+
+        pool = (idx if (self.full_pool_below is not None
+                        and n > self.full_pool_below) else self.pool_idx)
+        return matrix_one_step_guess(self.table, pool, idx, self.scorer)
 
 
 if __name__ == "__main__":

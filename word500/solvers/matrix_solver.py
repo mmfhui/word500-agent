@@ -94,6 +94,32 @@ class MatrixSolver(Solver):
         self.cand_idx = self.cand_idx[row[self.cand_idx] == code]
 
 
+def matrix_one_step_guess(
+    table: FeedbackTable,
+    pool_idx: NDArray[np.int32],
+    idx: NDArray[np.int32],
+    scorer: Callable[[NDArray[np.int32], int], NDArray[np.float64]],
+) -> str:
+    """Best one-step guess from `pool_idx` against candidates `idx`, via the table.
+
+    Shared by MatrixOneStep and any other solver that wants matrix-backed
+    one-step scoring for a large candidate pool.
+    """
+    n = len(idx)
+    sub = table.matrix[np.ix_(pool_idx, idx)]
+    counts = np.empty((len(pool_idx), N_CLASSES), dtype=np.int32)
+    for code in range(N_CLASSES):
+        counts[:, code] = (sub == code).sum(axis=1)
+
+    scores = scorer(counts, n)
+    tied = np.flatnonzero(scores == scores.max())
+    # Prefer a guess that could itself be the answer; then lowest index,
+    # matching the pure-Python implementation's tie-breaking.
+    prefer = tied[np.isin(pool_idx[tied], idx)]
+    best = int(pool_idx[prefer[0] if len(prefer) else tied[0]])
+    return str(table.words[best])
+
+
 class MatrixOneStep(MatrixSolver):
     """One-step-ahead search over the feedback table."""
 
@@ -132,15 +158,4 @@ class MatrixOneStep(MatrixSolver):
         # then every guess scored in a single array operation. Scoring guesses
         # one at a time is dominated by numpy's per-call overhead on 20-element
         # arrays, which costs more than the arithmetic.
-        sub = self.table.matrix[np.ix_(pool, idx)]
-        counts = np.empty((len(pool), N_CLASSES), dtype=np.int32)
-        for code in range(N_CLASSES):
-            counts[:, code] = (sub == code).sum(axis=1)
-
-        scores = self.scorer(counts, n)
-        tied = np.flatnonzero(scores == scores.max())
-        # Prefer a guess that could itself be the answer; then lowest index,
-        # matching the pure-Python implementation's tie-breaking.
-        prefer = tied[np.isin(pool[tied], idx)]
-        best = int(pool[prefer[0] if len(prefer) else tied[0]])
-        return self.table.words[best]
+        return matrix_one_step_guess(self.table, pool, idx, self.scorer)
