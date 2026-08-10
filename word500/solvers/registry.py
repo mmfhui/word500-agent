@@ -85,10 +85,14 @@ SOLVERS = {
     "endgame": lambda candidates, seed: EndgameSolver(
         candidates,
         guess_pool=load_allowed(),
+        table=table(),
         cutoff=10,
         use_two_step=True,
         first_metric="expected",
-        second_metric="expected",
+        second_metric="entropy",
+        scorer=M_SCORERS["entropy"],
+        full_pool_below=FULL_POOL_BELOW,
+        opener=OPENER,
     ),
 }
 
