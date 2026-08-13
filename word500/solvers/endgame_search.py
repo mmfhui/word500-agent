@@ -83,6 +83,14 @@ def negative_entropy(partitions: Dict[Feedback, List[str]]) -> float:
             bits -= p * log2(p)
     return -bits
 
+def negative_parts_count(partitions: Dict[Feedback, List[str]]) -> int:
+    """Negated count of distinct feedback buckets the guess produces.
+
+    Negated for the same reason as negative_entropy: more distinct buckets is
+    better (Knuth's "most parts"), but callers minimise regardless of metric.
+    """
+    return -len(partitions)
+
 def one_step_score(
     candidates: Iterable[str],
     guess: str,
@@ -96,6 +104,8 @@ def one_step_score(
         return worst_partition_size(partitions)
     if metric == "entropy":
         return negative_entropy(partitions)
+    if metric == "parts":
+        return negative_parts_count(partitions)
     raise ValueError(f"Unknown metric: {metric}")
 
 def best_one_step_guess(
