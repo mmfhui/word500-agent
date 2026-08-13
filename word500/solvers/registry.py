@@ -94,6 +94,37 @@ SOLVERS = {
         full_pool_below=FULL_POOL_BELOW,
         opener=OPENER,
     ),
+    # Same two-move lookahead, but minimising the worst case at both plies
+    # instead of the expectation -- true minimax rather than expectimax.
+    "endgame-minimax": lambda candidates, seed: EndgameSolver(
+        candidates,
+        guess_pool=load_allowed(),
+        table=table(),
+        cutoff=10,
+        use_two_step=True,
+        first_metric="worst",
+        second_metric="worst",
+        scorer=M_SCORERS["minimax"],
+        full_pool_below=FULL_POOL_BELOW,
+        opener=OPENER,
+    ),
+    # Same two-move lookahead again, but the leaf guess is chosen by how many
+    # distinct feedback buckets it produces ("most parts") instead of entropy
+    # or worst-case. first_metric stays "expected" -- most-parts is a leaf
+    # metric like entropy, not a branch-combination rule like expected/worst,
+    # so there is no "parts" aggregator to plug in at the first level.
+    "endgame-parts": lambda candidates, seed: EndgameSolver(
+        candidates,
+        guess_pool=load_allowed(),
+        table=table(),
+        cutoff=10,
+        use_two_step=True,
+        first_metric="expected",
+        second_metric="parts",
+        scorer=M_SCORERS["parts"],
+        full_pool_below=FULL_POOL_BELOW,
+        opener=OPENER,
+    ),
 }
 
 
